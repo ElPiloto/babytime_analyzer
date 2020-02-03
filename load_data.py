@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import glob
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pdb
 import os
@@ -35,7 +36,6 @@ def parse_generic(line):
 
   k, v = line.split(':')
   return {k: v}
-
 
 def clean_key(k):
   k = k.strip()
@@ -175,12 +175,9 @@ def sleep_by_days(df):
   plt.xticks(rotation=90)
   plt.legend()
 
-  #
-  plt.subplot(5, 4, 18)
-  plt.scatter(total_naps.values/60., total_sleep.values/60.)
-  plt.xlabel('Total Nap')
-  plt.ylabel('Total Sleep')
 
+  plot10 = np.copy(max_naps.values/60.)
+  # 12
   plt.subplot(5, 4, 10)
   plt.scatter(max_naps.values/60., total_sleep.values/60.)
   plt.xlabel('Max Nap Length')
@@ -191,15 +188,25 @@ def sleep_by_days(df):
   plt.xlabel('Num Naps')
   plt.ylabel('Total Sleep')
 
+  plot12 = np.copy(max_naps.values/60.)
+  # 3.
   plt.subplot(5, 4, 12)
   plt.scatter(max_naps.values/60., max_sleep.values/60.)
   plt.xlabel('Max Nap Length')
   plt.ylabel('Max Sleep Length')
 
+  # 12
+  plot13 = np.copy(max_naps.values/60.)
   plt.subplot(5, 4, 13)
   plt.scatter(max_naps.values/60., count_sleep.values)
   plt.xlabel('Max Nap Length')
   plt.ylabel('Num Sleeps')
+
+  #
+  plt.subplot(5, 4, 18)
+  plt.scatter(total_naps.values/60., total_sleep.values/60.)
+  plt.xlabel('Total Nap')
+  plt.ylabel('Total Sleep')
 
   plt.subplot(5, 4, 20)
   plt.scatter(total_naps.values/60., count_sleep.values)
