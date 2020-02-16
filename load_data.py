@@ -3,8 +3,17 @@ import glob
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sn
 import pdb
 import os
+
+# TODO(piloto): look at predicting amount of awake time at night vs. nap properties
+# TODO(piloto): look at gap between last nap and bedtime
+
+try:
+  plt.interactive(True)
+except:
+  pass
 
 # 2020-01-23 11:35 PM
 _DATETIME_FORMAT = '%Y-%m-%d %I:%M %p'
@@ -34,7 +43,7 @@ def parse_generic(line):
   if line == _END_OF_RECORD_DELIMITER:
     return {}
 
-  k, v = line.split(':')
+  k, v = line.split(': ')
   return {k: v}
 
 def clean_key(k):
@@ -127,12 +136,51 @@ def main():
   df = pd.DataFrame(data)
   sleep_by_days(df)
 
+def cleanup_naps(naps):
+  print('Cleaning up nap')
+  print('=================')
+  # Remove any naps which were longer than 6 hours, clearly that's not a nap.
+  print('Num naps before dropping anything: {}'.format(len(naps)))
+  naps = naps.drop(naps[(naps.type == 'nap') & (naps.duration > 6*60)].index)
+  print('Num naps after dropping long naps: {}'.format(len(naps)))
+  naps = naps.drop(naps[naps.duration == 0].index)
+  print('Num sleeps after dropping days with 0 naps: {}'.format(len(naps)))
+  print('\n')
+  return naps
+
+def cleanup_sleeps(sleeps):
+  print('Cleaning up sleep')
+  print('=================')
+  invalid_sleep_dates = [
+      # Entered monolithically instead of based on wake ups
+      '2019-12-19',
+      '2019-12-20',
+      '2019-12-21',
+      '2019-12-22',
+      # flights US <--> UK
+      '2019-12-14',
+      '2019-12-28',
+      ]
+  # Remove some sleep data that was entered as a long chunk instead of detailed information:
+  print('Num sleeps before dropping anything: {}'.format(len(sleeps)))
+  for d in invalid_sleep_dates:
+    sleeps = sleeps.drop(sleeps.loc[d].index)
+  print('Num sleeps after dropping invalid input sleep dates: {}'.format(len(sleeps)))
+  sleeps = sleeps.drop(sleeps[sleeps.duration == 0].index)
+  print('Num sleeps after dropping days with 0 sleep: {}'.format(len(sleeps)))
+  print('\n')
+  return sleeps
+
+
 def sleep_by_days(df):
   # this means that any sleep (but not naps) that happen up until 8 A.M. will get counted as the day before
 
   sleeps = df.copy()
   sleeps['modified_start'] = sleeps['start'] 
-  sleeps[sleeps['type'] == 'sleep']['modified_start'] += timedelta(hours=-8)
+  #sleeps[sleeps['type'] == 'sleep']['modified_start'] += timedelta(hours=-8)
+
+  sleeps.loc[sleeps['type'] == 'sleep', 'modified_start'] = sleeps.loc[sleeps['type'] == 'sleep', 'modified_start'] + timedelta(hours=-8)
+  #data.loc[data['name'] == 'fred', 'A'] = 0
   sleeps = sleeps.set_index('modified_start')
   sleeps = sleeps.sort_values(by='modified_start')
 
@@ -141,9 +189,28 @@ def sleep_by_days(df):
   naps = naps[naps.type.eq('nap')]
   naps = naps.sort_values(by='start')
 
+  naps = cleanup_naps(naps)
+
   sleeps = sleeps[sleeps.type.eq('sleep')]
-  total_naps = naps.resample('D').duration.sum()
-  total_sleep = sleeps.resample('D').duration.sum()
+  sleeps = cleanup_sleeps(sleeps)
+
+  def nonempty(x, method='sum'):
+    if not x.empty:
+      # there has to be a better way to do this?
+      if method == 'sum':
+        return x.sum()
+      elif method == 'count':
+        return x.count()
+      elif method == 'max':
+        return x.max()
+      elif method == 'min':
+        return x.min()
+
+  #total_naps = naps.resample('D').duration.sum()
+  #total_sleep = sleeps.resample('D').duration.sum()
+
+  total_naps = naps.resample('D').duration.apply(nonempty)
+  total_sleep = sleeps.resample('D').duration.apply(nonempty)
 
   max_naps = naps.resample('D').duration.max()
   max_sleep = sleeps.resample('D').duration.max()
@@ -173,13 +240,14 @@ def sleep_by_days(df):
   plt.plot_date(total_naps.keys(), total_naps.values/60., label='Naps')
   plt.plot_date(total_sleep.keys(), total_sleep.values/60., label='Sleeps')
   plt.xticks(rotation=90)
-  plt.legend()
+  #plt.legend()
 
 
   plot10 = np.copy(max_naps.values/60.)
   # 12
   plt.subplot(5, 4, 10)
-  plt.scatter(max_naps.values/60., total_sleep.values/60.)
+  #plt.scatter(max_naps.values/60., total_sleep.values/60.)
+  sn.regplot(max_naps.values/60., total_sleep.values/60., robust=True)
   plt.xlabel('Max Nap Length')
   plt.ylabel('Total Sleep')
 
@@ -191,14 +259,16 @@ def sleep_by_days(df):
   plot12 = np.copy(max_naps.values/60.)
   # 3.
   plt.subplot(5, 4, 12)
-  plt.scatter(max_naps.values/60., max_sleep.values/60.)
+  #plt.scatter(max_naps.values/60., max_sleep.values/60.)
+  sn.regplot(max_naps.values/60., max_sleep.values/60., robust=True)
   plt.xlabel('Max Nap Length')
   plt.ylabel('Max Sleep Length')
 
   # 12
   plot13 = np.copy(max_naps.values/60.)
   plt.subplot(5, 4, 13)
-  plt.scatter(max_naps.values/60., count_sleep.values)
+  #plt.scatter(max_naps.values/60., count_sleep.values)
+  sn.regplot(max_naps.values/60., count_sleep.values, robust=True)
   plt.xlabel('Max Nap Length')
   plt.ylabel('Num Sleeps')
 
@@ -209,7 +279,8 @@ def sleep_by_days(df):
   plt.ylabel('Total Sleep')
 
   plt.subplot(5, 4, 20)
-  plt.scatter(total_naps.values/60., count_sleep.values)
+  #plt.scatter(total_naps.values/60., count_sleep.values)
+  sn.regplot(total_naps.values/60., count_sleep.values, robust=True)
   plt.xlabel('Total Nap')
   plt.ylabel('Num Sleeps')
 
